@@ -36,6 +36,12 @@ public class WindowChecker {
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     public static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
 
+    [DllImport("user32.dll")]
+    public static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
+
     public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
     [StructLayout(LayoutKind.Sequential)]
@@ -48,6 +54,14 @@ public class WindowChecker {
         public System.Drawing.Rectangle rcNormalPosition;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MONITORINFO {
+        public int cbSize;
+        public System.Drawing.Rectangle rcMonitor;
+        public System.Drawing.Rectangle rcWork;
+        public uint dwFlags;
+    }
+
     public const int GWL_STYLE = -16;
     public const int GWL_EXSTYLE = -20;
     public const int WS_VISIBLE = 0x10000000;
@@ -58,11 +72,32 @@ public class WindowChecker {
     public const int SW_SHOWMAXIMIZED = 3;
     public const int SW_SHOWNORMAL = 1;
     public const int SW_HIDE = 0;
+    public const uint MONITOR_DEFAULTTONEAREST = 2;
+    public const int MONITORINFOF_PRIMARY = 1;
 
     public static bool IsAnyWindowNotMinimized() {
         IntPtr shellWindow = GetShellWindow();
         IntPtr progman = FindWindow("Progman", null);
         IntPtr workerW = FindWindow("WorkerW", null);
+        
+        IntPtr primaryMonitor = IntPtr.Zero;
+        EnumWindows((hWnd, lParam) => {
+            if (hWnd != IntPtr.Zero) {
+                IntPtr hMonitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+                MONITORINFO mi = new MONITORINFO();
+                mi.cbSize = Marshal.SizeOf(typeof(MONITORINFO));
+                if (GetMonitorInfo(hMonitor, ref mi) && (mi.dwFlags & MONITORINFOF_PRIMARY) != 0) {
+                    primaryMonitor = hMonitor;
+                    return false;
+                }
+            }
+            return true;
+        }, IntPtr.Zero);
+
+        if (primaryMonitor == IntPtr.Zero) {
+            primaryMonitor = MonitorFromWindow(IntPtr.Zero, 2);
+        }
+
         bool[] hasVisibleNonMinimized = { false };
         string[] excludeTitles = { 
             "Windows Input Experience", 
@@ -122,6 +157,9 @@ public class WindowChecker {
             WINDOWPLACEMENT placement = new WINDOWPLACEMENT();
             placement.length = Marshal.SizeOf(typeof(WINDOWPLACEMENT));
             GetWindowPlacement(hWnd, ref placement);
+
+            IntPtr hMonitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+            if (hMonitor != primaryMonitor) return true;
 
             if (placement.showCmd == SW_SHOWNORMAL || placement.showCmd == SW_SHOWMAXIMIZED) {
                 hasVisibleNonMinimized[0] = true;
