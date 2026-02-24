@@ -75,6 +75,97 @@ public class WindowChecker {
     public const uint MONITOR_DEFAULTTONEAREST = 2;
     public const int MONITORINFOF_PRIMARY = 1;
 
+    public static bool IsAnyWindowOnSecondaryMonitor() {
+        IntPtr shellWindow = GetShellWindow();
+        IntPtr progman = FindWindow("Progman", null);
+        IntPtr workerW = FindWindow("WorkerW", null);
+        
+        IntPtr primaryMonitor = IntPtr.Zero;
+        EnumWindows((hWnd, lParam) => {
+            if (hWnd != IntPtr.Zero) {
+                IntPtr hMonitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+                MONITORINFO mi = new MONITORINFO();
+                mi.cbSize = Marshal.SizeOf(typeof(MONITORINFO));
+                if (GetMonitorInfo(hMonitor, ref mi) && (mi.dwFlags & MONITORINFOF_PRIMARY) != 0) {
+                    primaryMonitor = hMonitor;
+                    return false;
+                }
+            }
+            return true;
+        }, IntPtr.Zero);
+
+        if (primaryMonitor == IntPtr.Zero) {
+            primaryMonitor = MonitorFromWindow(IntPtr.Zero, 2);
+        }
+
+        string[] excludeTitles = { 
+            "Windows Input Experience", 
+            "Microsoft Text Input", 
+            "Touch Keyboard", 
+            "Task Switching",
+            "Taskbar",
+            "Cortana",
+            "Start",
+            "Program Manager"
+        };
+        
+        string[] excludeClasses = {
+            "Shell_TrayWnd",
+            "Shell_SecondaryTrayWnd",
+            "Windows.UI.Core.CoreWindow",
+            "ApplicationFrameWindow",
+            "Windows.UI.Shell.WindowManagerProxy",
+            "Progman",
+            "WorkerW",
+            "DV2ControlHost",
+            "TaskbarThumbnailWnd",
+            "ThumbnailWnd"
+        };
+
+        bool[] hasWindowOnSecondary = { false };
+        
+        EnumWindows((hWnd, lParam) => {
+            if (hWnd == IntPtr.Zero) return true;
+            if (hWnd == shellWindow) return true;
+            if (hWnd == progman) return true;
+            if (hWnd == workerW) return true;
+
+            int length = GetWindowTextLength(hWnd);
+            if (length == 0) return true;
+
+            int style = GetWindowLong(hWnd, GWL_STYLE);
+            int exStyle = GetWindowLong(hWnd, GWL_EXSTYLE);
+
+            if ((style & WS_VISIBLE) == 0) return true;
+            if ((exStyle & WS_EX_TOOLWINDOW) != 0) return true;
+
+            StringBuilder className = new StringBuilder(256);
+            GetClassName(hWnd, className, className.Capacity);
+            string classStr = className.ToString();
+
+            foreach (string ex in excludeClasses) {
+                if (classStr == ex) return true;
+            }
+
+            StringBuilder sb = new StringBuilder(length + 1);
+            GetWindowText(hWnd, sb, sb.Capacity);
+            string title = sb.ToString();
+
+            foreach (string ex in excludeTitles) {
+                if (title.Contains(ex)) return true;
+            }
+
+            IntPtr hMonitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+            if (hMonitor == primaryMonitor) return true;
+            if (hMonitor == IntPtr.Zero) return true;
+
+            hasWindowOnSecondary[0] = true;
+            return false;
+        }, IntPtr.Zero);
+
+        return hasWindowOnSecondary[0];
+    }
+
     public static bool IsAnyWindowNotMinimized() {
         IntPtr shellWindow = GetShellWindow();
         IntPtr progman = FindWindow("Progman", null);
@@ -191,6 +282,18 @@ Write-Host "Active profile: $profileActive"
 Write-Host ""
 
 while ($true) {
+    $anyWindowOnSecondary = [WindowChecker]::IsAnyWindowOnSecondaryMonitor()
+    
+    if ($anyWindowOnSecondary) {
+        Write-Host "$(Get-Date -Format 'HH:mm:ss') Windows on secondary monitor - skipping"
+        $lastState = "secondary"
+        $stableCount = 0
+        $pendingProfile = $null
+        $pendingSince = $null
+        Start-Sleep -Seconds $pollInterval
+        continue
+    }
+    
     $anyWindowActive = [WindowChecker]::IsAnyWindowNotMinimized()
     $newState = if ($anyWindowActive) { "active" } else { "minimized" }
 
