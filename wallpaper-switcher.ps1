@@ -176,7 +176,7 @@ $stableCount = 0
 $currentProfile = $null
 $pendingProfile = $null
 $pendingSince = $null
-$activeDelaySeconds = 5
+$activeDelaySeconds = 3
 
 Write-Host "Wallpaper Profile Switcher Started"
 Write-Host "Monitoring window states every $pollInterval second(s)..."
