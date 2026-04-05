@@ -31,12 +31,26 @@ public class WindowChecker {
     public static extern bool GetWindowPlacement(IntPtr hWnd, ref WINDOWPLACEMENT lpwndpl);
 
     [DllImport("user32.dll")]
+    public static extern IntPtr MonitorFromWindow(IntPtr hWnd, uint dwFlags);
+
+    [DllImport("user32.dll")]
+    public static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
+
+    [DllImport("user32.dll")]
     public static extern IntPtr GetShellWindow();
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     public static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
 
     public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MONITORINFO {
+        public int cbSize;
+        public System.Drawing.Rectangle rcMonitor;
+        public System.Drawing.Rectangle rcWork;
+        public int dwFlags;
+    }
 
     [StructLayout(LayoutKind.Sequential)]
     public struct WINDOWPLACEMENT {
@@ -47,6 +61,10 @@ public class WindowChecker {
         public System.Drawing.Point ptMaxPosition;
         public System.Drawing.Rectangle rcNormalPosition;
     }
+
+    public const int MONITOR_DEFAULTTONULL = 0;
+    public const int MONITOR_DEFAULTTOPRIMARY = 1;
+    public const int MONITOR_DEFAULTTONEAREST = 2;
 
     public const int GWL_STYLE = -16;
     public const int GWL_EXSTYLE = -20;
@@ -64,6 +82,10 @@ public class WindowChecker {
         IntPtr progman = FindWindow("Progman", null);
         IntPtr workerW = FindWindow("WorkerW", null);
         bool[] hasVisibleNonMinimized = { false };
+
+        // Get primary monitor bounds
+        System.Drawing.Rectangle primaryBounds = System.Windows.Forms.Screen.PrimaryScreen.Bounds;
+
         string[] excludeTitles = { 
             "Windows Input Experience", 
             "Microsoft Text Input", 
@@ -123,6 +145,16 @@ public class WindowChecker {
             placement.length = Marshal.SizeOf(typeof(WINDOWPLACEMENT));
             GetWindowPlacement(hWnd, ref placement);
 
+            // Check if window is on primary monitor
+            IntPtr hMonitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONULL);
+            if (hMonitor != IntPtr.Zero) {
+                MONITORINFO mi = new MONITORINFO();
+                mi.cbSize = Marshal.SizeOf(typeof(MONITORINFO));
+                if (GetMonitorInfo(hMonitor, ref mi)) {
+                    if (mi.rcMonitor != primaryBounds) return true;
+                }
+            }
+
             if (placement.showCmd == SW_SHOWNORMAL || placement.showCmd == SW_SHOWMAXIMIZED) {
                 hasVisibleNonMinimized[0] = true;
                 return false;
@@ -137,7 +169,7 @@ public class WindowChecker {
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     public static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
 }
-"@ -ReferencedAssemblies System.Drawing
+"@ -ReferencedAssemblies System.Drawing, System.Windows.Forms
 
 $lastState = $null
 $stableCount = 0
