@@ -6,8 +6,8 @@ $debug = $false
 $stabilityCount = 2
 
 # Configuration for monitored apps
-$monitoredApps = @("zen.exe", "Code.exe", "Discord.exe", "Files.exe", "Everything.exe", "qbittorrent.exe", "MRA.exe")
-$excludeClasses = @("MozillaDialogClass")
+$monitoredApps = @("zen.exe", "Code.exe", "Discord.exe", "Files.exe", "Everything.exe", "qbittorrent.exe", "MRA.exe", "WindowsTerminal.exe", "explorer.exe")
+$excludeClasses = @("MozillaDialogClass", "Progman")
 
 Add-Type @"
 using System;
@@ -86,13 +86,19 @@ public class WindowChecker {
             string processName = "";
             try { processName = Process.GetProcessById(pid).ProcessName + ".exe"; } catch { }
             
-            bool isMonitored = false;
-            foreach (string app in monitoredApps) { if (processName.Equals(app, StringComparison.OrdinalIgnoreCase)) isMonitored = true; }
-            if (!isMonitored) return true;
-
             StringBuilder className = new StringBuilder(256);
             GetClassName(hWnd, className, className.Capacity);
             string classStr = className.ToString();
+
+            // Handle explorer.exe restriction: only CabinetWClass
+            if (processName.Equals("explorer.exe", StringComparison.OrdinalIgnoreCase)) {
+                if (!classStr.Equals("CabinetWClass", StringComparison.OrdinalIgnoreCase)) return true;
+            } else {
+                bool isMonitored = false;
+                foreach (string app in monitoredApps) { if (processName.Equals(app, StringComparison.OrdinalIgnoreCase)) isMonitored = true; }
+                if (!isMonitored) return true;
+            }
+
             foreach (string ex in excludeClasses) { if (classStr == ex) return true; }
 
             WINDOWPLACEMENT placement = new WINDOWPLACEMENT();
