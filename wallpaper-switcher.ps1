@@ -131,10 +131,6 @@ $pendingProfile = $null
 $pendingSince = $null
 $activeDelaySeconds = 3
 
-Write-Host "Wallpaper Profile Switcher Started"
-Write-Host "Monitoring window states every $pollInterval second(s)..."
-Write-Host ""
-
 while ($true) {
     $anyWindowActive = [WindowChecker]::IsAnyMonitoredWindowVisible($monitoredApps, $excludeClasses)
     $newState = if ($anyWindowActive) { "active" } else { "minimized" }
@@ -143,12 +139,12 @@ while ($true) {
         $pendingState = if ($pendingProfile -eq $profileActive) { "active" } else { "minimized" }
         
         if ($newState -ne $pendingState) {
-            Write-Host "$(Get-Date -Format 'HH:mm:ss') Pending cancelled - state changed to $newState"
+            Write-Host "Cancelled: $newState"
             $pendingProfile = $null
             $pendingSince = $null
         } elseif ($pendingSince -ne $null -and ((Get-Date) - $pendingSince).TotalSeconds -ge $activeDelaySeconds) {
             if ($pendingProfile -ne $currentProfile) {
-                Write-Host "$(Get-Date -Format 'HH:mm:ss') Delay complete: Applying profile $pendingProfile"
+                Write-Host "Applied: $pendingProfile"
                 & $wallpaperExe -control openProfile -profile $pendingProfile
                 $currentProfile = $pendingProfile
             }
@@ -170,7 +166,7 @@ while ($true) {
         if ($desiredProfile -ne $currentProfile) {
             $pendingProfile = $desiredProfile
             $pendingSince = Get-Date
-            Write-Host "$(Get-Date -Format 'HH:mm:ss') State stable: $newState → Waiting $activeDelaySeconds seconds before applying $desiredProfile..."
+            Write-Host "Stable: $newState -> Wait $activeDelaySeconds s for $desiredProfile"
         }
         
         $stableCount = 0
